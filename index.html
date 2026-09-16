@@ -6,7 +6,7 @@
 <title>Smart Shram Compliance — AI Compliance Copilot</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Serif:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif:wght@500;600;700&family=Noto+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root{
   --navy-900:#0B1F3A;
@@ -30,8 +30,8 @@
   --border:#DCE2EB;
   --border-soft:#EAEEF3;
   --focus:#2B6FC4;
-  --font-serif:'IBM Plex Serif',Georgia,serif;
-  --font-sans:'IBM Plex Sans',Arial,sans-serif;
+  --font-serif:'Noto Serif',Georgia,serif;
+  --font-sans:'Noto Sans',Arial,sans-serif;
 }
 *{box-sizing:border-box;}
 html,body{margin:0;padding:0;}
@@ -479,6 +479,7 @@ function genDocsFor(est){
   var n = 1;
   DOC_CATEGORIES.forEach(function(cat, ci){
     var pool = DOC_NAME_POOL[cat] || ["Document.pdf"];
+    // deterministically include most categories, occasionally skip one to simulate a missing-evidence gap
     var skip = (seed + ci*7) % 5 === 0 && cat !== "Establishment Registration";
     if(skip) return;
     var pick = pool[(seed + ci*3) % pool.length];
@@ -623,7 +624,7 @@ function shell(role, activeHash, bodyHtml, pageTitle){
     '<aside class="sidebar">'+
       '<div class="brand"><div class="mark">SS</div><div class="name">Smart Shram<small>Compliance Copilot</small></div></div>'+
       '<nav>'+navHtml+'</nav>'+
-      '<div class="foot">Signed in as<br><b style="color:#fff">'+esc(whoRole)+'</b><br><button data-action="logout" style="background:none;border:none;padding:0;color:#9FB2CC;text-decoration:underline;cursor:pointer;font-size:inherit;">Log out</button></div>'+
+      '<div class="foot">Signed in as<br><b style="color:#fff">'+esc(whoRole)+'</b><br><a href="#" data-action="logout" style="color:#9FB2CC;text-decoration:underline;">Log out</a></div>'+
     '</aside>'+
     '<div class="main">'+
       '<div class="topbar">'+
@@ -744,11 +745,8 @@ function pageLogin(){
     '<div class="field"><label>Password</label><input type="password" value="demo-password"></div>'+
     '<div class="captcha-box"><span>Secure login verification (demo placeholder)</span><span class="tag">\u2713 verified</span></div>'+
     '<button class="btn btn-primary" style="width:100%;justify-content:center" data-action="login" data-role="'+role+'">Log in as '+(role==="employer"?"Employer":"Inspector-cum-Facilitator")+'</button>'+
-    '<div class="login-links">'+
-      '<a href="#/login" onclick="alert(\'Password reset instructions sent to registered email.\');return false;">Forgot password</a>'+
-      '<a href="#/onboarding">Register establishment</a>'+
-    '</div>'+
-    '<div class="footer-note">Need help? <a href="#/about" style="color:var(--blue-600);font-weight:600">Contact support</a> &middot; <a href="#" data-action="reset-demo" style="color:var(--ink-faint)">Reset demo data</a></div>'+
+    '<div class="login-links"><a href="#">Forgot password</a><a href="#">Register establishment</a></div>'+
+    '<div class="footer-note">Need help? <a href="#" style="color:var(--blue-600);font-weight:600">Contact support</a> &middot; <a href="#" data-action="reset-demo" style="color:var(--ink-faint)">Reset demo data</a></div>'+
   '</div></div>');
 }
 
@@ -1299,6 +1297,7 @@ function attachInspectorFilterHandlers(){
   });
 }
 function renderInspectorTableOnly(){
+  // simplest reliable approach: re-render whole page but preserve focus loss is acceptable for a demo
   var active = document.activeElement ? document.activeElement.id : null;
   document.getElementById("app").innerHTML = pageInspectorDashboard();
   attachInspectorFilterHandlers();
@@ -1311,12 +1310,6 @@ window.addEventListener("hashchange", render);
    EVENT DELEGATION
 ========================================================= */
 document.addEventListener("click", function(e){
-  // Prevent jumping to top of page when clicking raw '#' links
-  var rawHashLink = e.target.closest('a[href="#"]');
-  if(rawHashLink && !rawHashLink.getAttribute("data-action")){
-    e.preventDefault();
-  }
-
   var t = e.target.closest("[data-action]");
   if(!t) return;
   var action = t.getAttribute("data-action");
@@ -1401,6 +1394,9 @@ document.addEventListener("click", function(e){
   else if(action==="open-est"){
     e.preventDefault();
     var id = t.getAttribute("data-id");
+    if(id==="est-abc"){
+      // ABC is the employer's own establishment; show detail using its live check data
+    }
     location.hash = "#/inspector/establishment?id="+id; render();
   }
   else if(action==="show-risk-info"){
@@ -1425,7 +1421,7 @@ document.addEventListener("click", function(e){
 function val(id){ var el = document.getElementById(id); return el?el.value:""; }
 function checked(id){ var el = document.getElementById(id); return el?el.checked:false; }
 
-/* File upload handling (drag & drop + file input) */
+/* File upload handling (drag & drop + file input) — captures name/size only, for the demo */
 document.addEventListener("change", function(e){
   if(e.target.matches("[data-fileinput]")){
     handleFiles(e.target.files, e.target.getAttribute("data-category"), e.target.getAttribute("data-resolve-id"));
@@ -1457,7 +1453,12 @@ function handleFiles(fileList, category, resolveId){
     });
   });
   saveState();
-  render();
+  if(resolveId){
+    // stay on the issue page; just re-render so the uploaded file shows nowhere specific but state is saved
+    render();
+  } else {
+    render();
+  }
 }
 
 /* =========================================================
