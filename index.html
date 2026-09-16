@@ -461,6 +461,37 @@ function genIssuesFor(est){
   });
 }
 
+/* Deterministic dummy uploaded-document set for portfolio establishments (inspector view) */
+var DOC_NAME_POOL = {
+  "Establishment Registration":["Establishment_Registration_Certificate.pdf","Shop_Establishment_Licence.pdf"],
+  "Payroll / Wage Records":["Payroll_Register_Aug2026.pdf","Wage_Slips_Q2.pdf","Monthly_Payroll_Summary.xlsx"],
+  "Attendance / Overtime":["Attendance_Register_Aug2026.pdf","Biometric_Attendance_Export.xlsx","Overtime_Log_Q2.pdf"],
+  "EPF / ESI Records":["EPF_ECR_Challan_Aug2026.pdf","ESI_Contribution_Statement.pdf"],
+  "Employee Register":["Employee_Master_Register.pdf","Form_A_Register_of_Workers.pdf"],
+  "Safety & Health Records":["Safety_Committee_Minutes.pdf","Fire_Safety_Certificate.pdf","Accident_Register.pdf"],
+  "Contractor Records":["Contractor_Licence_Copy.pdf","Contractor_Worker_Roster.xlsx"],
+  "Licences / Certificates":["Factory_Licence.pdf","Trade_Licence.pdf"],
+  "Other Compliance Documents":["Grievance_Committee_Record.pdf","Inspection_Response_Letter.pdf"]
+};
+function genDocsFor(est){
+  var seed = 0; for(var i=0;i<est.id.length;i++){ seed += est.id.charCodeAt(i); }
+  var docs = [];
+  var n = 1;
+  DOC_CATEGORIES.forEach(function(cat, ci){
+    var pool = DOC_NAME_POOL[cat] || ["Document.pdf"];
+    var skip = (seed + ci*7) % 5 === 0 && cat !== "Establishment Registration";
+    if(skip) return;
+    var pick = pool[(seed + ci*3) % pool.length];
+    var sizeMb = (((seed + ci*13) % 40) / 10 + 0.4).toFixed(1);
+    docs.push({
+      id: est.id+"-doc-"+(n++),
+      name: pick, category: cat, size: sizeMb+" MB",
+      uploadedText: est.activityText
+    });
+  });
+  return docs;
+}
+
 /* =========================================================
    STATE
 ========================================================= */
@@ -592,7 +623,7 @@ function shell(role, activeHash, bodyHtml, pageTitle){
     '<aside class="sidebar">'+
       '<div class="brand"><div class="mark">SS</div><div class="name">Smart Shram<small>Compliance Copilot</small></div></div>'+
       '<nav>'+navHtml+'</nav>'+
-      '<div class="foot">Signed in as<br><b style="color:#fff">'+esc(whoRole)+'</b><br><a href="#" data-action="logout" style="color:#9FB2CC;text-decoration:underline;">Log out</a></div>'+
+      '<div class="foot">Signed in as<br><b style="color:#fff">'+esc(whoRole)+'</b><br><button data-action="logout" style="background:none;border:none;padding:0;color:#9FB2CC;text-decoration:underline;cursor:pointer;font-size:inherit;">Log out</button></div>'+
     '</aside>'+
     '<div class="main">'+
       '<div class="topbar">'+
@@ -713,8 +744,11 @@ function pageLogin(){
     '<div class="field"><label>Password</label><input type="password" value="demo-password"></div>'+
     '<div class="captcha-box"><span>Secure login verification (demo placeholder)</span><span class="tag">\u2713 verified</span></div>'+
     '<button class="btn btn-primary" style="width:100%;justify-content:center" data-action="login" data-role="'+role+'">Log in as '+(role==="employer"?"Employer":"Inspector-cum-Facilitator")+'</button>'+
-    '<div class="login-links"><a href="#">Forgot password</a><a href="#">Register establishment</a></div>'+
-    '<div class="footer-note">Need help? <a href="#" style="color:var(--blue-600);font-weight:600">Contact support</a> &middot; <a href="#" data-action="reset-demo" style="color:var(--ink-faint)">Reset demo data</a></div>'+
+    '<div class="login-links">'+
+      '<a href="#/login" onclick="alert(\'Password reset instructions sent to registered email.\');return false;">Forgot password</a>'+
+      '<a href="#/onboarding">Register establishment</a>'+
+    '</div>'+
+    '<div class="footer-note">Need help? <a href="#/about" style="color:var(--blue-600);font-weight:600">Contact support</a> &middot; <a href="#" data-action="reset-demo" style="color:var(--ink-faint)">Reset demo data</a></div>'+
   '</div></div>');
 }
 
@@ -1086,6 +1120,7 @@ function pageInspectorEstablishment(){
   if(!e){ return shell("inspector","#/inspector", '<p>Establishment not found.</p><a class="btn btn-secondary" href="#/inspector">Back</a>', "Establishment"); }
   var isAbc = e.isEmployerDemo;
   var checks = isAbc ? STATE.checks.filter(function(k){ return k.status!=="compliant"; }) : genIssuesFor(e);
+  var docs = isAbc ? STATE.docs : genDocsFor(e);
   var reasons = buildRiskReasons(e);
   var body = ''+
   '<div class="breadcrumb"><a href="#/inspector">Establishments</a> / '+esc(e.name)+'</div>'+
@@ -1104,6 +1139,8 @@ function pageInspectorEstablishment(){
   '</div>'+
   '<h3 style="margin-top:22px">Why is this establishment '+e.riskLevel.toLowerCase()+' risk? <span class="info-icon" data-action="show-risk-info">i</span></h3>'+
   '<div class="card">'+ reasons.map(function(r){ return '<div class="check-row">'+dot(r.status)+'<div>'+r.text+'</div></div>'; }).join('') +'</div>'+
+  '<h3 style="margin-top:22px">Uploaded documents <span class="tag">'+docs.length+' on file</span></h3>'+
+  '<div class="card">'+ renderInspectorDocList(docs) +'</div>'+
   '<h3 style="margin-top:22px">Evidence-backed findings</h3>'+
   '<div>'+ checks.map(renderInspectorIssue).join('') +'</div>'+
   '<h3 style="margin-top:22px">Compliance history</h3>'+
@@ -1145,6 +1182,38 @@ function renderInspectorIssue(k){
       '<div class="kv"><div class="k">Expected</div><div>'+esc(k.expected||"—")+'</div></div>'+
       '<div class="kv"><div class="k">Confidence</div><div>'+(k.confidence!=null?k.confidence+"%":"—")+'</div></div>'+
       '<div class="kv"><div class="k">Recommended action</div><div>Verify the underlying records during inspection; '+(k.action&&k.action[0]?k.action[0].toLowerCase():"confirm current status with the establishment")+'.</div></div>'+
+    '</div>'+
+  '</div>';
+}
+
+function renderInspectorDocList(docs){
+  if(!docs.length){
+    return '<p style="font-size:13.2px;color:var(--ink-soft);margin:0">No documents have been uploaded by this establishment yet.</p>';
+  }
+  var byCategory = {};
+  docs.forEach(function(d){ (byCategory[d.category] = byCategory[d.category]||[]).push(d); });
+  return Object.keys(byCategory).map(function(cat){
+    return '<div class="doc-cat" style="margin-bottom:10px"><h4>'+esc(cat)+'</h4>'+
+      byCategory[cat].map(function(d){
+        return '<div class="doc-card">'+
+          '<div class="dinfo"><span>\uD83D\uDCC4</span><div><div class="dname">'+esc(d.name)+'</div>'+
+          '<div class="dmeta">'+esc(d.size)+' &middot; \u2713 Uploaded'+(d.uploadedText?' &middot; '+esc(d.uploadedText):'')+'</div></div></div>'+
+          '<button class="btn btn-sm btn-outline-blue" data-action="view-document" data-name="'+esc(d.name)+'" data-category="'+esc(d.category)+'" data-size="'+esc(d.size)+'">View</button>'+
+        '</div>';
+      }).join('')+
+    '</div>';
+  }).join('');
+}
+function docViewModalHtml(name, category, size){
+  return '<div class="modal-backdrop" data-action="close-modal">'+
+    '<div class="modal" style="max-width:420px" onclick="event.stopPropagation()">'+
+      '<button class="modal-close" data-action="close-modal">\u2715</button>'+
+      '<h3 style="font-size:15px">'+esc(name)+'</h3>'+
+      '<div class="tag" style="margin-bottom:12px">Prototype — document preview simulated</div>'+
+      '<div class="kv"><div class="k">Category</div><div>'+esc(category)+'</div></div>'+
+      '<div class="kv"><div class="k">File size</div><div>'+esc(size)+'</div></div>'+
+      '<div class="kv"><div class="k">Status</div><div>\u2713 Uploaded</div></div>'+
+      '<p style="font-size:12.6px;color:var(--ink-faint);margin-top:12px">This is a demo build, so the original file is not stored or rendered here. In the full platform, this would open a secure in-browser preview of the uploaded document.</p>'+
     '</div>'+
   '</div>';
 }
@@ -1230,7 +1299,6 @@ function attachInspectorFilterHandlers(){
   });
 }
 function renderInspectorTableOnly(){
-  // simplest reliable approach: re-render whole page but preserve focus loss is acceptable for a demo
   var active = document.activeElement ? document.activeElement.id : null;
   document.getElementById("app").innerHTML = pageInspectorDashboard();
   attachInspectorFilterHandlers();
@@ -1243,6 +1311,12 @@ window.addEventListener("hashchange", render);
    EVENT DELEGATION
 ========================================================= */
 document.addEventListener("click", function(e){
+  // Prevent jumping to top of page when clicking raw '#' links
+  var rawHashLink = e.target.closest('a[href="#"]');
+  if(rawHashLink && !rawHashLink.getAttribute("data-action")){
+    e.preventDefault();
+  }
+
   var t = e.target.closest("[data-action]");
   if(!t) return;
   var action = t.getAttribute("data-action");
@@ -1327,9 +1401,6 @@ document.addEventListener("click", function(e){
   else if(action==="open-est"){
     e.preventDefault();
     var id = t.getAttribute("data-id");
-    if(id==="est-abc"){
-      // ABC is the employer's own establishment; show detail using its live check data
-    }
     location.hash = "#/inspector/establishment?id="+id; render();
   }
   else if(action==="show-risk-info"){
@@ -1337,6 +1408,12 @@ document.addEventListener("click", function(e){
     var wrap = document.createElement("div");
     wrap.innerHTML = riskInfoModalHtml();
     document.body.appendChild(wrap.firstChild);
+  }
+  else if(action==="view-document"){
+    e.preventDefault();
+    var wrap2 = document.createElement("div");
+    wrap2.innerHTML = docViewModalHtml(t.getAttribute("data-name"), t.getAttribute("data-category"), t.getAttribute("data-size"));
+    document.body.appendChild(wrap2.firstChild);
   }
   else if(action==="close-modal"){
     e.preventDefault();
@@ -1348,7 +1425,7 @@ document.addEventListener("click", function(e){
 function val(id){ var el = document.getElementById(id); return el?el.value:""; }
 function checked(id){ var el = document.getElementById(id); return el?el.checked:false; }
 
-/* File upload handling (drag & drop + file input) — captures name/size only, for the demo */
+/* File upload handling (drag & drop + file input) */
 document.addEventListener("change", function(e){
   if(e.target.matches("[data-fileinput]")){
     handleFiles(e.target.files, e.target.getAttribute("data-category"), e.target.getAttribute("data-resolve-id"));
@@ -1380,12 +1457,7 @@ function handleFiles(fileList, category, resolveId){
     });
   });
   saveState();
-  if(resolveId){
-    // stay on the issue page; just re-render so the uploaded file shows nowhere specific but state is saved
-    render();
-  } else {
-    render();
-  }
+  render();
 }
 
 /* =========================================================
